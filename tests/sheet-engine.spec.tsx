@@ -135,9 +135,13 @@ describe('sheet engine', () => {
   it('keeps other groups when one rule is rejected', async () => {
     const cache = createCache({ engine: 'sheet' });
 
-    // Fill the sheet first so the next injection takes the incremental path,
-    // where a single rejected rule must not abort the rest.
-    cache.engine.inject({ key: 'ok', css: '.ok{color:red}' });
+    // Fill the sheet past the small-sheet threshold so the next flush takes the
+    // incremental path, where `insertRule` can reject a single rule.
+    const filler = Array.from(
+      { length: 250 },
+      (_, i) => `.filler-${i}{color:red}`,
+    ).join('');
+    cache.engine.inject({ key: 'filler', css: filler });
     await flush();
 
     // jsdom rejects `@layer` blocks from `insertRule` (Chromium accepts them).
@@ -145,8 +149,25 @@ describe('sheet engine', () => {
     cache.engine.inject({ key: 'later', css: '.later{color:blue}' });
     await flush();
 
-    expect(sheetCss()).toContain('.ok{color:red;}');
+    expect(sheetCss()).toContain('.filler-0{color:red;}');
     expect(sheetCss()).toContain('.later{color:blue;}');
+    expect(sheetRuleCount()).toBe(251);
+  });
+
+  it('rewrites a small sheet instead of patching it', async () => {
+    const cache = createCache({ engine: 'sheet' });
+
+    cache.engine.inject({ key: 'a', css: '.a{color:red}' });
+    cache.engine.inject({ key: 'b', css: '.b{color:blue}' });
+    await flush();
+    expect(sheetRuleCount()).toBe(2);
+
+    cache.engine.inject({ key: 'c', css: '.c{color:green}' });
+    await flush();
+
+    expect(sheetRuleCount()).toBe(3);
+    expect(sheetCss()).toContain('.a{color:red;}');
+    expect(sheetCss()).toContain('.c{color:green;}');
   });
 
   it('removes a group on request', async () => {

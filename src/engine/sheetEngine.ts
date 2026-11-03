@@ -42,6 +42,14 @@ interface SheetState {
 /** Below this amount of changed rules, patching is always cheaper. */
 const REBUILD_MIN_RULES = 500;
 
+/**
+ * A small sheet is cheaper to rewrite than to diff: `insertRule` costs a
+ * cross-boundary call per rule, which only pays off on large sheets. This also
+ * keeps zero-runtime pages (a few dozen CSS variable rules) off the
+ * incremental path.
+ */
+const SMALL_SHEET_RULES = 200;
+
 function isLayerDecl(rules: string[]) {
   return (
     rules.length > 0 && rules.every((rule) => /^@layer[^{]*;\s*$/.test(rule))
@@ -271,11 +279,14 @@ export default class SheetEngine implements StyleEngine {
       return;
     }
 
+    const appliedRules = this.appliedRuleCount(state);
+    if (appliedRules < SMALL_SHEET_RULES) {
+      this.rebuild(state, style, desired);
+      return;
+    }
+
     const changedRules = this.countChangedRules(state, desired);
-    if (
-      changedRules > REBUILD_MIN_RULES &&
-      changedRules > this.appliedRuleCount(state) * 0.5
-    ) {
+    if (changedRules > REBUILD_MIN_RULES && changedRules > appliedRules * 0.5) {
       this.rebuild(state, style, desired);
       return;
     }
