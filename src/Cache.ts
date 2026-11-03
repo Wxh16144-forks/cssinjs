@@ -1,3 +1,5 @@
+import type { StyleEngine } from './engine/interface';
+
 export type KeyType = string | number;
 type ValueType = [number, any]; // [times, realValue]
 
@@ -13,6 +15,10 @@ let updateId = 0;
 
 class Entity {
   instanceId: string;
+
+  /** DOM backend of this cache. Assigned when the cache is created. */
+  engine!: StyleEngine;
+
   constructor(instanceId: string) {
     this.instanceId = instanceId;
   }

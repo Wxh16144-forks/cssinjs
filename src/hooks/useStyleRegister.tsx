@@ -1,5 +1,4 @@
 import hash from '@emotion/hash';
-import { removeCSS, updateCSS } from '@rc-component/util/lib/Dom/dynamicCSS';
 import type * as CSS from 'csstype';
 import * as React from 'react';
 // @ts-ignore
@@ -10,18 +9,8 @@ import type Keyframes from '../Keyframes';
 import type { Linter } from '../linters';
 import { contentQuotesLinter, hashedAnimationLinter } from '../linters';
 import type { HashPriority } from '../StyleContext';
-import StyleContext, {
-  ATTR_CACHE_PATH,
-  ATTR_MARK,
-  CSS_IN_JS_INSTANCE,
-} from '../StyleContext';
-import {
-  injectCSPNonce,
-  isClientSide,
-  isNonNullable,
-  toStyleStr,
-  where,
-} from '../util';
+import StyleContext from '../StyleContext';
+import { isClientSide, isNonNullable, toStyleStr, where } from '../util';
 import {
   CSS_FILE_STYLE,
   existPath,
@@ -454,7 +443,7 @@ export default function useStyleRegister(
     (cacheValue, fromHMR) => {
       const [, styleId] = cacheValue;
       if (fromHMR && isClientSide) {
-        removeCSS(styleId, { mark: ATTR_MARK, attachTo: container });
+        cache.engine.remove(styleId, { container });
       }
     },
 
@@ -462,14 +451,12 @@ export default function useStyleRegister(
     (cacheValue) => {
       const [styleStr, styleId, effectStyle, , priority] = cacheValue;
       if (isMergedClientSide && styleStr !== CSS_FILE_STYLE) {
-        let mergedCSSConfig: Parameters<typeof updateCSS>[2] = {
-          mark: ATTR_MARK,
-          prepend: enableLayer ? false : 'queue',
-          attachTo: container,
+        const sharedParams = {
           priority,
+          prepend: (enableLayer ? false : 'queue') as false | 'queue',
+          nonce,
+          container,
         };
-
-        mergedCSSConfig = injectCSPNonce(mergedCSSConfig, nonce);
 
         // ================= Split Effect Style =================
         // We will split effectStyle here since @layer should be at the top level
@@ -487,32 +474,34 @@ export default function useStyleRegister(
         // ================= Inject Layer Style =================
         // Inject layer style
         effectLayerKeys.forEach((effectKey) => {
-          updateCSS(
-            normalizeStyle(effectStyle[effectKey], autoPrefix || false),
-            `_layer-${effectKey}`,
-            { ...mergedCSSConfig, prepend: true },
-          );
+          cache.engine.inject({
+            ...sharedParams,
+            key: `_layer-${effectKey}`,
+            css: normalizeStyle(effectStyle[effectKey], autoPrefix || false),
+            prepend: true,
+          });
         });
 
         // ==================== Inject Style ====================
         // Inject style
-        const style = updateCSS(styleStr, styleId, mergedCSSConfig);
-
-        (style as any)[CSS_IN_JS_INSTANCE] = cache.instanceId;
-
-        // Debug usage. Dev only
-        if (process.env.NODE_ENV !== 'production') {
-          style.setAttribute(ATTR_CACHE_PATH, fullPath.join('|'));
-        }
+        cache.engine.inject({
+          ...sharedParams,
+          key: styleId,
+          css: styleStr,
+          cachePath:
+            process.env.NODE_ENV !== 'production'
+              ? fullPath.join('|')
+              : undefined,
+        });
 
         // ================ Inject Effect Style =================
         // Inject client side effect style
         effectRestKeys.forEach((effectKey) => {
-          updateCSS(
-            normalizeStyle(effectStyle[effectKey], autoPrefix || false),
-            `_effect-${effectKey}`,
-            mergedCSSConfig,
-          );
+          cache.engine.inject({
+            ...sharedParams,
+            key: `_effect-${effectKey}`,
+            css: normalizeStyle(effectStyle[effectKey], autoPrefix || false),
+          });
         });
       }
     },

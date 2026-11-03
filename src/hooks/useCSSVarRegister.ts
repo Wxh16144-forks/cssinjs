@@ -1,11 +1,6 @@
-import { removeCSS, updateCSS } from '@rc-component/util/lib/Dom/dynamicCSS';
 import { useContext } from 'react';
-import StyleContext, {
-  ATTR_MARK,
-  ATTR_TOKEN,
-  CSS_IN_JS_INSTANCE,
-} from '../StyleContext';
-import { injectCSPNonce, isClientSide, toStyleStr } from '../util';
+import StyleContext from '../StyleContext';
+import { isClientSide, toStyleStr } from '../util';
 import type { TokenWithCSSVar } from '../util/css-variables';
 import { transformToken } from '../util/css-variables';
 import type { ExtractStyle } from './useGlobalCache';
@@ -36,11 +31,7 @@ const useCSSVarRegister = <V, T extends Record<string, V>>(
   fn: () => T,
 ) => {
   const { key, prefix, unitless, ignore, token, hashId, scope, nonce } = config;
-  const {
-    cache: { instanceId },
-    container,
-    hashPriority,
-  } = useContext(StyleContext);
+  const { cache: cacheEntity, container, hashPriority } = useContext(StyleContext);
   const { _tokenKey: tokenKey } = token;
 
   const scopeKey = Array.isArray(scope) ? scope.join('@@') : scope;
@@ -64,28 +55,23 @@ const useCSSVarRegister = <V, T extends Record<string, V>>(
     },
     ([, , styleId]) => {
       if (isClientSide) {
-        removeCSS(styleId, { mark: ATTR_MARK, attachTo: container });
+        cacheEntity.engine.remove(styleId, { container });
       }
     },
     ([, cssVarsStr, styleId]) => {
       if (!cssVarsStr) {
         return;
       }
-      let mergedCSSConfig: Parameters<typeof updateCSS>[2] = {
-        mark: ATTR_MARK,
+
+      cacheEntity.engine.inject({
+        key: styleId,
+        css: cssVarsStr,
         prepend: 'queue',
-        attachTo: container,
         priority: -999,
-      };
-
-      mergedCSSConfig = injectCSPNonce(mergedCSSConfig, nonce);
-
-      const style = updateCSS(cssVarsStr, styleId, mergedCSSConfig);
-
-      (style as any)[CSS_IN_JS_INSTANCE] = instanceId;
-
-      // Used for `useCacheToken` to remove on batch when token removed
-      style.setAttribute(ATTR_TOKEN, key);
+        nonce,
+        tokenKey: key,
+        container,
+      });
     },
   );
 

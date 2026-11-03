@@ -2,18 +2,21 @@ import useMemo from '@rc-component/util/lib/hooks/useMemo';
 import isEqual from '@rc-component/util/lib/isEqual';
 import * as React from 'react';
 import CacheEntity from './Cache';
+import { ATTR_MARK, CSS_IN_JS_INSTANCE } from './constants';
+import createEngine from './engine';
+import type { EngineOptions } from './engine';
 import type { Linter } from './linters/interface';
 import { AUTO_PREFIX } from './transformers/autoPrefix';
 import type { Transformer } from './transformers/interface';
 
-export const ATTR_TOKEN = 'data-token-hash';
-export const ATTR_MARK = 'data-css-hash';
-export const ATTR_CACHE_PATH = 'data-cache-path';
+export {
+  ATTR_CACHE_PATH,
+  ATTR_MARK,
+  ATTR_TOKEN,
+  CSS_IN_JS_INSTANCE,
+} from './constants';
 
-// Mark css-in-js instance in style element
-export const CSS_IN_JS_INSTANCE = '__cssinjs_instance__';
-
-export function createCache() {
+export function createCache(options?: EngineOptions) {
   const cssinjsInstanceId = Math.random().toString(12).slice(2);
 
   // Tricky SSR: Move all inline style to the head.
@@ -47,7 +50,10 @@ export function createCache() {
     );
   }
 
-  return new CacheEntity(cssinjsInstanceId);
+  const cache = new CacheEntity(cssinjsInstanceId);
+  cache.engine = createEngine(cssinjsInstanceId, options);
+
+  return cache;
 }
 
 export type HashPriority = 'low' | 'high';

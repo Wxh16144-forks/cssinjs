@@ -67,6 +67,25 @@ npm start
 
 return CacheEntity for StyleProvider.
 
+```ts
+import { createCache, StyleProvider } from '@ant-design/cssinjs';
+
+const cache = createCache();
+// <StyleProvider cache={cache}>...</StyleProvider>
+```
+
+`createCache` accepts the DOM injection backend. The decision is made once per cache, so a cache never mixes two ordering models.
+
+| Option | Desc | Type | Default |
+| --- | --- | --- | --- |
+| engine | `legacy` injects one `<style>` element per style group. `sheet` keeps the rules in JS and projects them onto a single `<style>` element with `insertRule` / `deleteRule`. `auto` picks `sheet` in production builds when the browser supports constructible stylesheets and the page was not rendered by SSR. | `'auto' \| 'legacy' \| 'sheet'` | `'auto'` |
+
+Notes:
+
+- `auto` resolves to `legacy` when `process.env.NODE_ENV !== 'production'`, so development keeps one `<style>` element per component for debugging.
+- A page that already contains server-rendered `style[data-css-hash]` elements stays on `legacy`; taking over SSR styles is not supported by the sheet backend yet.
+- The sheet backend orders rules by `order` inside the single element. Rules from other libraries that use `data-rc-order` are no longer interleaved rule by rule with cssinjs styles; the whole element is positioned as one block.
+
 ### createTheme
 
 Create theme object. When same algorithm provided, it will return same object.

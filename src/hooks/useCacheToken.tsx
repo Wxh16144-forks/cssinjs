@@ -1,19 +1,9 @@
 import hash from '@emotion/hash';
-import { updateCSS } from '@rc-component/util/lib/Dom/dynamicCSS';
 import { useContext } from 'react';
-import StyleContext, {
-  ATTR_MARK,
-  ATTR_TOKEN,
-  CSS_IN_JS_INSTANCE,
-} from '../StyleContext';
+import type CacheEntity from '../Cache';
+import StyleContext from '../StyleContext';
 import type Theme from '../theme/Theme';
-import {
-  flattenToken,
-  injectCSPNonce,
-  memoResult,
-  token2key,
-  toStyleStr,
-} from '../util';
+import { flattenToken, memoResult, token2key, toStyleStr } from '../util';
 import { transformToken } from '../util/css-variables';
 import type { ExtractStyle } from './useGlobalCache';
 import useGlobalCache from './useGlobalCache';
@@ -87,22 +77,14 @@ function recordCleanToken(tokenKey: string) {
   tokenKeys.set(tokenKey, (tokenKeys.get(tokenKey) || 0) + 1);
 }
 
-function removeStyleTags(key: string, instanceId: string) {
-  if (typeof document !== 'undefined') {
-    const styles = document.querySelectorAll(`style[${ATTR_TOKEN}="${key}"]`);
-
-    styles.forEach((style) => {
-      if ((style as any)[CSS_IN_JS_INSTANCE] === instanceId) {
-        style.parentNode?.removeChild(style);
-      }
-    });
-  }
+function removeTokenStyles(tokenKey: string, cacheEntity: CacheEntity) {
+  cacheEntity.engine.removeByToken(tokenKey);
 }
 
 const TOKEN_THRESHOLD = -1;
 
 // Remove will check current keys first
-function cleanTokenStyle(tokenKey: string, instanceId: string) {
+function cleanTokenStyle(tokenKey: string, cacheEntity: CacheEntity) {
   tokenKeys.set(tokenKey, (tokenKeys.get(tokenKey) || 0) - 1);
 
   const cleanableKeyList = new Set<string>();
@@ -113,7 +95,7 @@ function cleanTokenStyle(tokenKey: string, instanceId: string) {
   // Should keep tokens under threshold for not to insert style too often
   if (tokenKeys.size - cleanableKeyList.size > TOKEN_THRESHOLD) {
     cleanableKeyList.forEach((key) => {
-      removeStyleTags(key, instanceId);
+      removeTokenStyles(key, cacheEntity);
       tokenKeys.delete(key);
     });
   }
@@ -170,7 +152,7 @@ export default function useCacheToken<
   option: Option<DerivativeToken, DesignToken>,
 ): TokenCacheValue<DerivativeToken> {
   const {
-    cache: { instanceId },
+    cache: cacheEntity,
     container,
     hashPriority,
   } = useContext(StyleContext);
@@ -226,31 +208,21 @@ export default function useCacheToken<
     },
     ([, , , , themeKey]) => {
       // Remove token will remove all related style
-      cleanTokenStyle(themeKey, instanceId);
+      cleanTokenStyle(themeKey, cacheEntity);
     },
     ([, , , cssVarsStr, themeKey]) => {
       if (!cssVarsStr) {
         return;
       }
-      let mergedCSSConfig: Parameters<typeof updateCSS>[2] = {
-        mark: ATTR_MARK,
+      cacheEntity.engine.inject({
+        key: hash(`css-var-${themeKey}`),
+        css: cssVarsStr,
         prepend: 'queue',
-        attachTo: container,
         priority: -999,
-      };
-
-      mergedCSSConfig = injectCSPNonce(mergedCSSConfig, nonce);
-
-      const style = updateCSS(
-        cssVarsStr,
-        hash(`css-var-${themeKey}`),
-        mergedCSSConfig,
-      );
-
-      (style as any)[CSS_IN_JS_INSTANCE] = instanceId;
-
-      // Used for `useCacheToken` to remove on batch when token removed
-      style.setAttribute(ATTR_TOKEN, themeKey);
+        nonce,
+        tokenKey: themeKey,
+        container,
+      });
     },
   );
 
